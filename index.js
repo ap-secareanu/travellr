@@ -14,14 +14,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const pg_1 = __importDefault(require("pg"));
+require("dotenv/config");
 const app = (0, express_1.default)();
 const port = 3000;
 app.use(express_1.default.urlencoded({ extended: true }));
 const db = new pg_1.default.Client({
-    user: "postgres",
-    host: 'localhost',
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
     database: 'travellr',
-    password: 'postgres',
+    password: process.env.DB_PASSWORD,
     port: 5432
 });
 db.connect();
@@ -48,17 +49,60 @@ app.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.send(friend.name);
 }));
 app.post("/add", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const currentUser = yield getCurrentUser();
     const friendName = req.body.friendName;
-    const result = yield db.query(`INSERT INTO friends(name, master_user) VALUES($1, $2)`, [friendName, currentUser.username]);
-    res.send(200);
+    const friendColor = req.body.friendColor;
+    try {
+        if (friendName.length >= 2) {
+            const currentUser = yield getCurrentUser();
+            const result = yield db.query(`INSERT INTO friends(name, master_user, color) VALUES($1, $2, $3)`, [friendName, currentUser.username, friendColor]);
+            res.send('Successfully added user.');
+        }
+        else {
+            throw new Error;
+        }
+        ;
+    }
+    catch (err) {
+        res.send("User already exists. Please enter a different name.");
+    }
+    ;
+}));
+app.post("/remove", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const toBeRemoved = req.body.friendName;
+    try {
+        const currentUser = yield getCurrentUser();
+        const result = yield db.query('DELETE FROM friends WHERE name=$1 AND master_user=$2', [toBeRemoved, currentUser.username]);
+        res.send('Successfully deleted friend.');
+    }
+    catch (err) {
+        res.send(err);
+    }
+    ;
 }));
 app.post("/country", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const countryName = req.body.countryName;
-    const country = yield getCountry(countryName);
     const friend = yield getCurrentFriend();
-    const result = yield db.query('INSERT INTO visited_countries (country_code, country_name, visited_by) VALUES ($1, $2, $3)', [country[0].country_code, country[0].country_name, friend.name]);
-    res.send('Successfully added country to visited countries.');
+    try {
+        const country = yield getCountry(countryName);
+        if (country.length > 0 && countryName >= 2) {
+            try {
+                const result = yield db.query('INSERT INTO visited_countries (country_code, country_name, visited_by) VALUES ($1, $2, $3)', [country[0].country_code, country[0].country_name, friend.name]);
+                res.send('Successfully added country to visited countries.');
+            }
+            catch (err) {
+                res.send('Country for this user already exists.');
+            }
+            ;
+        }
+        else {
+            throw new Error();
+        }
+        ;
+    }
+    catch (err) {
+        res.send('Country not found. Please enter a valid country or state.');
+    }
+    ;
 }));
 app.listen(port, () => {
     console.log(`API running on port ${port}`);

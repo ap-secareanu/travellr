@@ -1,21 +1,22 @@
 import express from 'express';
 import pg from 'pg';
+import 'dotenv/config';
 
 const app = express();
 const port = 3000;
 app.use(express.urlencoded({ extended: true }));
 
 const db = new pg.Client({
-  user: "postgres",
-  host: 'localhost',
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
   database: 'travellr',
-  password: 'postgres',
+  password: process.env.DB_PASSWORD,
   port: 5432
 });
 db.connect();
 
-let currentUserId:number = 1;
-let currentFriendId:number = 2;
+let currentUserId: number = 1;
+let currentFriendId: number = 2;
 
 const getCurrentUser = async () => {
   const result = await db.query(
@@ -38,7 +39,7 @@ const getVisitedCountries = async () => {
   return result.rows;
 };
 
-const getCountry = async (name:string) => {
+const getCountry = async (name: string) => {
   const result = await db.query(
     "SELECT * FROM countries WHERE LOWER(country_name) LIKE '%' || $1 || '%'", [name]
   );
@@ -50,23 +51,57 @@ app.get("/", async (req, res) => {
   res.send(friend.name);
 });
 
-app.post("/add", async(req, res) => {       // todo Refactor for try...catch block
-  const currentUser = await getCurrentUser();
-  const friendName = req.body.friendName;
-  const result = await db.query(
-    `INSERT INTO friends(name, master_user) VALUES($1, $2)`, [friendName, currentUser.username]
-  );
-  res.send(200);
+app.post("/add", async (req, res) => {
+  const friendName: string = req.body.friendName;
+  const friendColor: string = req.body.friendColor;
+  try {
+    if (friendName.length >= 2) {
+      const currentUser = await getCurrentUser();
+      const result = await db.query(
+        `INSERT INTO friends(name, master_user, color) VALUES($1, $2, $3)`, [friendName, currentUser.username, friendColor]
+      );
+      res.send('Successfully added user.');
+    } else {
+      throw new Error;
+    };
+  } catch (err) {
+    res.send("User already exists. Please enter a different name.");
+  };
 });
 
-app.post("/country", async(req, res) => {
+app.post("/remove", async (req, res) => {
+  const toBeRemoved:string = req.body.friendName;
+  try {
+    const currentUser = await getCurrentUser();
+    const result = await db.query(
+      'DELETE FROM friends WHERE name=$1 AND master_user=$2', [toBeRemoved, currentUser.username]
+    );
+    res.send('Successfully deleted friend.');
+  } catch (err) {
+    res.send(err);
+  };
+});
+
+app.post("/country", async (req, res) => {
   const countryName = req.body.countryName;
-  const country = await getCountry(countryName);
   const friend = await getCurrentFriend();
-  const result = await db.query(
-    'INSERT INTO visited_countries (country_code, country_name, visited_by) VALUES ($1, $2, $3)', [country[0].country_code, country[0].country_name, friend.name]
-  );
-  res.send('Successfully added country to visited countries.');
+  try {
+    const country = await getCountry(countryName);
+    if (country.length > 0 && countryName >= 2) {
+      try {
+        const result = await db.query(
+          'INSERT INTO visited_countries (country_code, country_name, visited_by) VALUES ($1, $2, $3)', [country[0].country_code, country[0].country_name, friend.name]
+        );
+        res.send('Successfully added country to visited countries.');
+      } catch (err) {
+        res.send('Country for this user already exists.')
+      };
+    } else {
+      throw new Error();
+    };
+  } catch (err) {
+    res.send('Country not found. Please enter a valid country or state.');
+  };
 });
 
 app.listen(port, () => {
