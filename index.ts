@@ -1,15 +1,20 @@
 import express from 'express';
 import pg from 'pg';
 import 'dotenv/config';
+import bcrypt from 'bcrypt';
 
 const app = express();
 const port = 3000;
+const saltRounds = 10;
+
+let loggedIn = false;
+
 app.use(express.urlencoded({ extended: true }));
 
 const db = new pg.Client({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
-  database: 'travellr',
+  database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: 5432
 });
@@ -102,6 +107,45 @@ app.post("/country", async (req, res) => {
   } catch (err) {
     res.send('Country not found. Please enter a valid country or state.');
   };
+});
+
+app.post("/register", async (req, res) => {   // TODO refactor into try...catch
+  const username = req.body.username;
+  const password = req.body.password;
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const result = await db.query(
+      'INSERT INTO users (username, password) VALUES ($1, $2)', [username, hashedPassword]
+    );
+    res.sendStatus(200);
+  } catch (err) {
+    res.sendStatus(500);
+  };
+
+  
+});
+
+app.post("/login", async (req, res) => {    // TODO refactor into try...catch
+  const username = req.body.username;
+  const password = req.body.password;
+
+  try {
+    const user = await db.query(
+      'SELECT * FROM users WHERE username=$1', [username]
+    );
+    if(user.rows.length) {
+      bcrypt.compare(password, user.rows[0].password, function(err, result) {
+        loggedIn = result;
+      });
+      res.sendStatus(200)
+    } else {
+      res.sendStatus(400);
+    }
+  } catch (err) {
+    res.sendStatus(500);
+  }
+
 });
 
 app.listen(port, () => {

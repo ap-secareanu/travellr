@@ -15,13 +15,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const pg_1 = __importDefault(require("pg"));
 require("dotenv/config");
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const app = (0, express_1.default)();
 const port = 3000;
+const saltRounds = 10;
+let loggedIn = false;
 app.use(express_1.default.urlencoded({ extended: true }));
 const db = new pg_1.default.Client({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
-    database: 'travellr',
+    database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: 5432
 });
@@ -103,6 +106,38 @@ app.post("/country", (req, res) => __awaiter(void 0, void 0, void 0, function* (
         res.send('Country not found. Please enter a valid country or state.');
     }
     ;
+}));
+app.post("/register", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const username = req.body.username;
+    const password = req.body.password;
+    try {
+        const hashedPassword = yield bcrypt_1.default.hash(password, saltRounds);
+        const result = yield db.query('INSERT INTO users (username, password) VALUES ($1, $2)', [username, hashedPassword]);
+        res.sendStatus(200);
+    }
+    catch (err) {
+        res.sendStatus(500);
+    }
+    ;
+}));
+app.post("/login", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const username = req.body.username;
+    const password = req.body.password;
+    try {
+        const user = yield db.query('SELECT * FROM users WHERE username=$1', [username]);
+        if (user.rows.length) {
+            bcrypt_1.default.compare(password, user.rows[0].password, function (err, result) {
+                loggedIn = result;
+            });
+            res.sendStatus(200);
+        }
+        else {
+            res.sendStatus(400);
+        }
+    }
+    catch (err) {
+        res.sendStatus(500);
+    }
 }));
 app.listen(port, () => {
     console.log(`API running on port ${port}`);
